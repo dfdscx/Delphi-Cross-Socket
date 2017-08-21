@@ -1,4 +1,4 @@
-{******************************************************************************}
+ï»¿{******************************************************************************}
 {                                                                              }
 {       Delphi cross platform socket library                                   }
 {                                                                              }
@@ -48,7 +48,7 @@ type
     FListensCount: Integer;
     FConnectionsCount: Integer;
 
-    // ÉèÖÃÌ×½Ó×ÖĞÄÌø²ÎÊı, ÓÃÓÚ´¦ÀíÒì³£¶ÏÏß(°ÎÍøÏß, Ö÷»úÒì³£µôµçµÈÔì³ÉµÄÍøÂçÒì³£)
+    // è®¾ç½®å¥—æ¥å­—å¿ƒè·³å‚æ•°, ç”¨äºå¤„ç†å¼‚å¸¸æ–­çº¿(æ‹”ç½‘çº¿, ä¸»æœºå¼‚å¸¸æ‰ç”µç­‰é€ æˆçš„ç½‘ç»œå¼‚å¸¸)
     function SetKeepAlive(ASocket: THandle): Integer;
   protected
     function ProcessIoEvent: Boolean; virtual; abstract;
@@ -67,56 +67,108 @@ type
     procedure StopLoop; virtual; abstract;
 
     /// <summary>
-    ///   ¼àÌı¶Ë¿Ú
+    ///   å»ºç«‹ç›‘å¬
     /// </summary>
     /// <param name="AHost">
-    ///   ¼àÌıµØÖ·:
+    ///   åœ°å€
     ///   <list type="bullet">
     ///     <item>
-    ///       Òª¼àÌıIPv4ºÍIPv6ËùÓĞµØÖ·, ÇëÉèÖÃÎª¿Õ <br />
+    ///       '', ç›‘å¬æ‰€æœ‰IPv4åŠIPv6åœ°å€
     ///     </item>
     ///     <item>
-    ///       Òªµ¥¶À¼àÌıIPv4, ÇëÉèÖÃÎª '0.0.0.0' <br />
+    ///       '0.0.0.0', ç›‘å¬æ‰€æœ‰IPv4åœ°å€
     ///     </item>
     ///     <item>
-    ///       Òªµ¥¶À¼àÌıIPv6, ÇëÉèÖÃÎª '::' <br />
+    ///       '::', ç›‘å¬æ‰€æœ‰IPv6åœ°å€
     ///     </item>
     ///     <item>
-    ///       Òª¼àÌıIPv4»·Â·µØÖ·, ÇëÉèÖÃÎª '127.0.0.1' <br />
+    ///       '127.0.0.1', ç›‘å¬æœ¬åœ°IPv4å›ç¯åœ°å€
     ///     </item>
     ///     <item>
-    ///       Òª¼àÌıIPv6»·Â·µØÖ·, ÇëÉèÖÃÎª '::1' <br />
+    ///       '::1', ç›‘å¬æœ¬åœ°IPv6å›ç¯åœ°å€
     ///     </item>
     ///   </list>
     /// </param>
     /// <param name="APort">
-    ///   ¼àÌı¶Ë¿Ú, ÉèÖÃÎª0ÔòËæ»ú¼àÌıÒ»¸ö¿ÉÓÃµÄ¶Ë¿Ú
+    ///   ç«¯å£
+    /// </param>
+    /// <param name="ACallback">
+    ///   å›è°ƒå‡½æ•°
     /// </param>
     /// <returns>
+    ///   è¿”å›å€¼åªèƒ½è¡¨æ˜ bind æ˜¯å¦è°ƒç”¨æˆåŠŸ
     ///   <list type="bullet">
     ///     <item>
-    ///       0 ³É¹¦
+    ///       0, è°ƒç”¨æˆåŠŸ
     ///     </item>
     ///     <item>
-    ///       -1 Ê§°Ü
+    ///       é0, è°ƒç”¨å¤±è´¥
     ///     </item>
     ///   </list>
+    ///   å½“å›è°ƒè¢«è§¦å‘æ—¶æ‰è¡¨æ˜ç›‘å¬æˆåŠŸæˆ–å¤±è´¥
     /// </returns>
-//    function Listen(const AHost: string; APort: Word): Integer; virtual; abstract;
     function Listen(const AHost: string; APort: Word;
-      const ACallback: TProc<Boolean> = nil): Integer; virtual; abstract;
+      const ACallback: TProc<THandle, Boolean> = nil): Integer; virtual; abstract;
 
-    // Á¬½Óµ½Ö÷»ú, ·µ»Ø0³É¹¦»òÁ¬½ÓÖĞ, -1Ê§°Ü
-    // TriggerConnected ±»´¥·¢²Å±íÊ¾Á¬½ÓÕæÕıÍê³É
-    // Á¬½ÓÊ§°Ü»á´¥·¢ TriggerConnectFailed
+    /// <summary>
+    ///   è¿æ¥åˆ°æœåŠ¡å™¨
+    /// </summary>
+    /// <param name="AHost">
+    ///   åœ°å€
+    /// </param>
+    /// <param name="APort">
+    ///   ç«¯å£
+    /// </param>
+    /// <param name="ACallback">
+    ///   å›è°ƒå‡½æ•°
+    /// </param>
+    /// <returns>
+    ///   è¿”å›å€¼åªèƒ½è¡¨æ˜ connect è°ƒç”¨æ˜¯å¦æˆåŠŸ
+    ///   <list type="bullet">
+    ///     <item>
+    ///       0, è°ƒç”¨æˆåŠŸ
+    ///     </item>
+    ///     <item>
+    ///       é0, è°ƒç”¨å¤±è´¥
+    ///     </item>
+    ///   </list>
+    ///   å½“å›è°ƒè¢«è§¦å‘æ—¶æ‰è¡¨æ˜è¿æ¥å»ºç«‹æˆ–è¿æ¥å¤±è´¥
+    /// </returns>
     function Connect(const AHost: string; APort: Word;
-      const ACallback: TProc<Boolean> = nil): Integer; virtual; abstract;
+      const ACallback: TProc<THandle, Boolean> = nil): Integer; virtual; abstract;
 
-    // ·¢ËÍÊı¾İ, ·µ»Ø·¢ËÍµÄ×Ö½ÚÊı, -1Ê§°Ü
-    // ÓÉÓÚ·¢ËÍÊÇÒì²½µÄ, ËùÒÔĞèÒªµ÷ÓÃÕß±£Ö¤·¢ËÍÍê³ÉÖ®Ç°»º´æµÄÓĞĞ§ĞÔ
-    // ·¢ËÍ¿ÉÄÜ»á±»²ğ³É¶à´Îioµ÷ÓÃ, ·µ»ØÖµÖ»ÄÜ±íÃ÷Ê×´Î·¢ËÍ³É¹¦Óë·ñ
+    // å‘é€æ•°æ®, è¿”å›å‘é€çš„å­—èŠ‚æ•°, -1å¤±è´¥
+    // ç”±äºå‘é€æ˜¯å¼‚æ­¥çš„, æ‰€ä»¥éœ€è¦è°ƒç”¨è€…ä¿è¯å‘é€å®Œæˆä¹‹å‰ç¼“å­˜çš„æœ‰æ•ˆæ€§
+    // å‘é€å¯èƒ½ä¼šè¢«æ‹†æˆå¤šæ¬¡ioè°ƒç”¨, è¿”å›å€¼åªèƒ½è¡¨æ˜é¦–æ¬¡å‘é€æˆåŠŸä¸å¦
+    /// <summary>
+    ///   å‘æŒ‡å®šå¥—æ¥å­—å‘é€æ•°æ®
+    /// </summary>
+    /// <param name="ASocket">
+    ///   å¥—æ¥å­—
+    /// </param>
+    /// <param name="ABuf">
+    ///   å¾…å‘é€æ•°æ®
+    /// </param>
+    /// <param name="ALen">
+    ///   æ•°æ®å°ºå¯¸
+    /// </param>
+    /// <param name="ACallback">
+    ///   å›è°ƒå‡½æ•°
+    /// </param>
+    /// <returns>
+    ///   è¿”å›å€¼åªèƒ½è¡¨æ˜ send æ˜¯å¦è°ƒç”¨æˆåŠŸ
+    ///   <list type="bullet">
+    ///     <item>
+    ///       0, è°ƒç”¨æˆåŠŸ
+    ///     </item>
+    ///     <item>
+    ///       é0, è°ƒç”¨å¤±è´¥
+    ///     </item>
+    ///   </list>
+    ///   å½“å›è°ƒè¢«è§¦å‘æ—¶æ‰è¡¨æ˜å‘é€æˆåŠŸæˆ–å¤±è´¥
+    /// </returns>
     function Send(ASocket: THandle; const ABuf; ALen: Integer;
-      const ACallback: TProc<Boolean> = nil): Integer; virtual; abstract;
+      const ACallback: TProc<THandle, Boolean> = nil): Integer; virtual; abstract;
 
     function Disconnect(ASocket: THandle): Integer; virtual;
     function CloseSocket(ASocket: THandle): Integer; virtual;
@@ -169,8 +221,8 @@ begin
   {$ENDIF MSWINDOWS}
 
   {$IFDEF POSIX}
-  // EINTR ±»ÏµÍ³ÖĞ¶Ïµ÷ÓÃÔİÊ±´ò¶Ï
-  // EAGAIN(EWOULDBLOCK) »º´æÖĞÃ»Êı¾İÁË
+  // EINTR è¢«ç³»ç»Ÿä¸­æ–­è°ƒç”¨æš‚æ—¶æ‰“æ–­
+  // EAGAIN(EWOULDBLOCK) ç¼“å­˜ä¸­æ²¡æ•°æ®äº†
   Result := (AErrCode = EINTR)
     or (AErrCode = EAGAIN)
     or (AErrCode = EWOULDBLOCK);
@@ -202,7 +254,7 @@ begin
     except
       {$IFDEF DEBUG}
       on e: Exception do
-        AppendLog('IoÏß³ÌID %d, Òì³£ %s, %s', [Self.ThreadID, e.ClassName, e.Message]);
+        AppendLog('%s Ioçº¿ç¨‹ID %d, å¼‚å¸¸ %s, %s', [FLoop.ClassName, Self.ThreadID, e.ClassName, e.Message]);
       {$ENDIF}
     end;
     {$IFDEF DEBUG}
@@ -210,7 +262,7 @@ begin
     {$ENDIF};
   end;
   {$IFDEF DEBUG}
-  AppendLog('IoÏß³ÌID %d, ±»µ÷ÓÃ %d ´Î', [Self.ThreadID, LRunCount]);
+  AppendLog('%s Ioçº¿ç¨‹ID %d, è¢«è°ƒç”¨äº† %d æ¬¡', [FLoop.ClassName, Self.ThreadID, LRunCount]);
   {$ENDIF}
 end;
 

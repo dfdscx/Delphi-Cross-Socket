@@ -23,8 +23,6 @@ type
 
     function GetActive: Boolean;
     procedure SetActive(const Value: Boolean);
-  protected
-    procedure TriggerListened(ASocket: THandle); override;
   public
     procedure CloseAllConnections; override;
     procedure DisconnectAll; override;
@@ -63,7 +61,7 @@ end;
 
 function TCrossServer.GetActive: Boolean;
 begin
-  Result := (FStarted = 1);
+  Result := (AtomicCmpExchange(FStarted, 0, 0) = 1);
 end;
 
 procedure TCrossServer.SetActive(const Value: Boolean);
@@ -87,10 +85,23 @@ begin
   StartLoop;
 
   Listen(FAddr, FPort,
-    procedure(ASuccess: Boolean)
+    procedure(ASocket: THandle; ASuccess: Boolean)
+    var
+      LAddr: TRawSockAddrIn;
+      LStuff: string;
     begin
       if not ASuccess then
         AtomicExchange(FStarted, 0);
+
+      // 如果是监听的随机端口
+      // 则在监听成功之后将实际的端口取出来
+      if (FPort = 0) then
+      begin
+        FillChar(LAddr, SizeOf(TRawSockAddrIn), 0);
+        LAddr.AddrLen := SizeOf(LAddr.Addr6);
+        if (TSocketAPI.GetSockName(ASocket, @LAddr.Addr, LAddr.AddrLen) = 0) then
+          TSocketAPI.ExtractAddrInfo(@LAddr.Addr, LAddr.AddrLen, LStuff, FPort);
+      end;
 
       if Assigned(ACallback) then
         ACallback(ASuccess);
@@ -102,19 +113,6 @@ begin
   CloseAll;
   StopLoop;
   AtomicExchange(FStarted, 0);
-end;
-
-procedure TCrossServer.TriggerListened(ASocket: THandle);
-var
-  LAddr: TRawSockAddrIn;
-  LStuff: string;
-begin
-  inherited;
-
-  // 如果是监听的随机端口
-  // 则在监听成功之后将实际的端口取出来
-  if (FPort = 0) and (TSocketAPI.GetSockName(ASocket, @LAddr.Addr, LAddr.AddrLen) = 0) then
-    TSocketAPI.ExtractAddrInfo(@LAddr.Addr, LAddr.AddrLen, LStuff, FPort);
 end;
 
 end.

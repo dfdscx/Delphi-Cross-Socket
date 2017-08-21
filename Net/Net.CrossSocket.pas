@@ -112,6 +112,8 @@ type
   ['{13C2A39E-C918-49B9-BBD3-A99110F94D1B}']
     function GetOwner: TCustomCrossSocket;
     function GetSocket: THandle;
+    function GetLocalAddr: string;
+    function GetLocalPort: Word;
     function GetPeerAddr: string;
     function GetPeerPort: Word;
     function GetConnectType: TConnectType;
@@ -203,6 +205,16 @@ type
     property Socket: THandle read GetSocket;
 
     /// <summary>
+    ///   本地IP地址
+    /// </summary>
+    property LocalAddr: string read GetLocalAddr;
+
+    /// <summary>
+    ///   本地端口
+    /// </summary>
+    property LocalPort: Word read GetLocalPort;
+
+    /// <summary>
     ///   连接IP地址
     /// </summary>
     property PeerAddr: string read GetPeerAddr;
@@ -234,12 +246,14 @@ type
   private
     FOwner: TCustomCrossSocket;
     FSocket: THandle;
-    FPeerAddr: string;
-    FPeerPort: Word;
+    FLocalAddr, FPeerAddr: string;
+    FLocalPort, FPeerPort: Word;
     FConnectType: Integer;
 
     function GetOwner: TCustomCrossSocket;
     function GetSocket: THandle;
+    function GetLocalAddr: string;
+    function GetLocalPort: Word;
     function GetPeerAddr: string;
     function GetPeerPort: Word;
     function GetConnectType: TConnectType;
@@ -267,6 +281,8 @@ type
 
     property Owner: TCustomCrossSocket read GetOwner;
     property Socket: THandle read GetSocket;
+    property LocalAddr: string read GetLocalAddr;
+    property LocalPort: Word read GetLocalPort;
     property PeerAddr: string read GetPeerAddr;
     property PeerPort: Word read GetPeerPort;
     property ConnectType: TConnectType read GetConnectType;
@@ -344,7 +360,8 @@ type
     constructor Create(AIoThreads: Integer); override;
     destructor Destroy; override;
 
-    function LockConnections: TArray<ICrossConnection>;
+    function LockConnections: TDictionary<THandle, ICrossConnection>;
+    function GetConnection(const ASocket: THandle): ICrossConnection;
     procedure UnlockConnections;
   end;
 
@@ -375,7 +392,7 @@ type
     ///   回调函数
     /// </param>
     /// <returns>
-    ///   返回值只能表明Connect调用是否成功
+    ///   返回值只能表明 connect 调用是否成功
     ///   <list type="bullet">
     ///     <item>
     ///       0, 调用成功
@@ -384,10 +401,10 @@ type
     ///       非0, 调用失败
     ///     </item>
     ///   </list>
-    ///   当OnConnected触发时才表明连接建立, 而OnConnectFailed触发则表明连接失败
+    ///   当回调被触发时才表明连接建立或连接失败
     /// </returns>
     function Connect(const AHost: string; APort: Word;
-      const ACallback: TProc<Boolean> = nil): Integer; override;
+      const ACallback: TProc<THandle, Boolean> = nil): Integer; override;
 
     /// <summary>
     ///   建立监听
@@ -404,13 +421,22 @@ type
     ///     <item>
     ///       '::', 监听所有IPv6地址
     ///     </item>
+    ///     <item>
+    ///       '127.0.0.1', 监听本地IPv4回环地址
+    ///     </item>
+    ///     <item>
+    ///       '::1', 监听本地IPv6回环地址
+    ///     </item>
     ///   </list>
     /// </param>
     /// <param name="APort">
     ///   端口
     /// </param>
+    /// <param name="ACallback">
+    ///   回调函数
+    /// </param>
     /// <returns>
-    ///   返回值只能表明bind是否调用成功
+    ///   返回值只能表明 bind 是否调用成功
     ///   <list type="bullet">
     ///     <item>
     ///       0, 调用成功
@@ -419,10 +445,10 @@ type
     ///       非0, 调用失败
     ///     </item>
     ///   </list>
-    ///   当OnListened触发时才表明监听成功 <br />
+    ///   当回调被触发时才表明监听成功或失败
     /// </returns>
     function Listen(const AHost: string; APort: Word;
-      const ACallback: TProc<Boolean> = nil): Integer; override;
+      const ACallback: TProc<THandle, Boolean> = nil): Integer; override;
 
     /// <summary>
     ///   强制关闭所有连接
@@ -467,7 +493,7 @@ type
 implementation
 
 uses
-  System.Math;
+  System.Math, Utils.Logger;
 
 { TCrossConnection }
 
@@ -504,7 +530,6 @@ var
   LBuffer: Pointer;
 begin
   LConnection := Self as ICrossConnection;
-  LBuffer := @ABuffer;
 
   if (FSocket = INVALID_HANDLE_VALUE) then
   begin
@@ -513,8 +538,9 @@ begin
     Exit;
   end;
 
+  LBuffer := @ABuffer;
   FOwner.Send(FSocket, ABuffer, ACount,
-    procedure(ASuccess: Boolean)
+    procedure(ASocket: THandle; ASuccess: Boolean)
     begin
       if ASuccess then
         FOwner.TriggerSent(LConnection, LBuffer, ACount);
@@ -679,6 +705,16 @@ begin
   end;
 end;
 
+function TCrossConnection.GetLocalAddr: string;
+begin
+  Result := FLocalAddr;
+end;
+
+function TCrossConnection.GetLocalPort: Word;
+begin
+  Result := FLocalPort;
+end;
+
 function TCrossConnection.GetOwner: TCustomCrossSocket;
 begin
   Result := FOwner;
@@ -730,6 +766,12 @@ begin
   FreeAndNil(FListenSocketsLocker);
 
   inherited Destroy;
+end;
+
+function TCustomCrossSocket.GetConnection(
+  const ASocket: THandle): ICrossConnection;
+begin
+  FConnections.TryGetValue(ASocket, Result);
 end;
 
 function TCustomCrossSocket.GetConnectionClass: TCrossConnectionClass;
@@ -815,6 +857,7 @@ end;
 procedure TCustomCrossSocket.TriggerConnected(ASocket: THandle;
   AConnectType: Integer);
 var
+  LConnObj: TCrossConnection;
   LConnection: ICrossConnection;
   LAddr: TRawSockAddrIn;
 begin
@@ -824,16 +867,20 @@ begin
   try
     if Assigned(FConnections) then
     begin
-      LConnection := GetConnectionClass.Create;
-      (LConnection as TCrossConnection).FOwner := Self;
-      (LConnection as TCrossConnection).FSocket := ASocket;
-      (LConnection as TCrossConnection).FConnectType := AConnectType;
+      LConnObj := GetConnectionClass.Create;
+      LConnection := LConnObj;
+      LConnObj.FOwner := Self;
+      LConnObj.FSocket := ASocket;
+      LConnObj.FConnectType := AConnectType;
+      FillChar(LAddr, SizeOf(TRawSockAddrIn), 0);
       LAddr.AddrLen := SizeOf(LAddr.Addr6);
       if (TSocketAPI.GetPeerName(ASocket, @LAddr.Addr, LAddr.AddrLen) = 0) then
         TSocketAPI.ExtractAddrInfo(@LAddr.Addr, LAddr.AddrLen,
-          (LConnection as TCrossConnection).FPeerAddr,
-          (LConnection as TCrossConnection).FPeerPort);
-      LConnection.Initialize;
+          LConnObj.FPeerAddr, LConnObj.FPeerPort);
+      if (TSocketAPI.GetSockName(ASocket, @LAddr.Addr, LAddr.AddrLen) = 0) then
+        TSocketAPI.ExtractAddrInfo(@LAddr.Addr, LAddr.AddrLen,
+          LConnObj.FLocalAddr, LConnObj.FLocalPort);
+      LConnObj.Initialize;
 
       FConnections.AddOrSetValue(ASocket, LConnection);
     end else
@@ -944,15 +991,14 @@ begin
   end;
 end;
 
-function TCustomCrossSocket.LockConnections: TArray<ICrossConnection>;
+function TCustomCrossSocket.LockConnections: TDictionary<THandle, ICrossConnection>;
 begin
   FConnectionsLocker.BeginRead;
-  Result := FConnections.Values.ToArray;
+  Result := FConnections;
 end;
 
 procedure TCustomCrossSocket.LogicConnected(AConnection: ICrossConnection);
 begin
-
 end;
 
 procedure TCustomCrossSocket.LogicConnectFailed(ASocket: THandle);
@@ -1006,7 +1052,7 @@ begin
 end;
 
 function TCrossSocket.Connect(const AHost: string; APort: Word;
-  const ACallback: TProc<Boolean>): Integer;
+  const ACallback: TProc<THandle, Boolean>): Integer;
 begin
   Result := inherited Connect(AHost, APort, ACallback);
 end;
@@ -1017,7 +1063,7 @@ begin
 end;
 
 function TCrossSocket.Listen(const AHost: string; APort: Word;
-  const ACallback: TProc<Boolean>): Integer;
+  const ACallback: TProc<THandle, Boolean>): Integer;
 begin
   Result := inherited Listen(AHost, APort, ACallback);
 end;

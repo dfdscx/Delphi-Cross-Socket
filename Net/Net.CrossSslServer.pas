@@ -63,7 +63,7 @@ end;
 
 function TCrossSslServer.GetActive: Boolean;
 begin
-  Result := (FStarted = 1);
+  Result := (AtomicCmpExchange(FStarted, 0, 0) = 1);
 end;
 
 procedure TCrossSslServer.SetActive(const Value: Boolean);
@@ -87,10 +87,23 @@ begin
   StartLoop;
 
   Listen(FAddr, FPort,
-    procedure(ASuccess: Boolean)
+    procedure(ASocket: THandle; ASuccess: Boolean)
+    var
+      LAddr: TRawSockAddrIn;
+      LStuff: string;
     begin
       if not ASuccess then
         AtomicExchange(FStarted, 0);
+
+      // 如果是监听的随机端口
+      // 则在监听成功之后将实际的端口取出来
+      if (FPort = 0) then
+      begin
+        FillChar(LAddr, SizeOf(TRawSockAddrIn), 0);
+        LAddr.AddrLen := SizeOf(LAddr.Addr6);
+        if (TSocketAPI.GetSockName(ASocket, @LAddr.Addr, LAddr.AddrLen) = 0) then
+          TSocketAPI.ExtractAddrInfo(@LAddr.Addr, LAddr.AddrLen, LStuff, FPort);
+      end;
 
       if Assigned(ACallback) then
         ACallback(ASuccess);
@@ -106,15 +119,32 @@ end;
 
 procedure TCrossSslServer.TriggerListened(ASocket: THandle);
 var
+  LPort: Word;
   LAddr: TRawSockAddrIn;
   LStuff: string;
 begin
   inherited;
 
+  // Delphi Tokyo 10.2以上的版本 AtomicCmpExchange 可以操作 Word 类型的变量
+  // 更老的版本会触发异常
+  {$IF CompilerVersion >= 32.0}
+  LPort := AtomicCmpExchange(FPort, 0, 0);
+  {$ELSE}
+  LPort := FPort;
+  {$ENDIF}
+
   // 如果是监听的随机端口
   // 则在监听成功之后将实际的端口取出来
-  if (FPort = 0) and (TSocketAPI.GetSockName(ASocket, @LAddr.Addr, LAddr.AddrLen) = 0) then
-    TSocketAPI.ExtractAddrInfo(@LAddr.Addr, LAddr.AddrLen, LStuff, FPort);
+  if (LPort = 0) then
+  begin
+    FillChar(LAddr, SizeOf(TRawSockAddrIn), 0);
+    LAddr.AddrLen := SizeOf(LAddr.Addr6);
+    if (TSocketAPI.GetSockName(ASocket, @LAddr.Addr, LAddr.AddrLen) = 0) then
+    begin
+      TSocketAPI.ExtractAddrInfo(@LAddr.Addr, LAddr.AddrLen, LStuff, LPort);
+      AtomicExchange(FPort, LPort);
+    end;
+  end;
 end;
 
 end.

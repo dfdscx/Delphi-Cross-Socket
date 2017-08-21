@@ -168,7 +168,7 @@ var
   I: Integer;
   B: Byte;
 begin
-  LConns := FSocket.LockConnections;
+  LConns := FSocket.LockConnections.Values.ToArray;
   if (LConns <> nil) then
   begin
     LStream := TBytesStream.Create(nil);
@@ -199,7 +199,7 @@ end;
 procedure TfmMain.Button3Click(Sender: TObject);
 begin
   FSocket.Connect(edtConnHost.Text, Trunc(edtConnPort.Value),
-    procedure(ASuccess: Boolean)
+    procedure(ASocket: THandle; ASuccess: Boolean)
     begin
       TThread.Synchronize(nil,
         procedure
@@ -235,7 +235,7 @@ begin
 
     FTesting := True;
 
-    LConns := FSocket.LockConnections;
+    LConns := FSocket.LockConnections.Values.ToArray;
     try
       for LConn in LConns do
       begin
