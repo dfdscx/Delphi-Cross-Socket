@@ -12,7 +12,7 @@ unit Linux.epoll;
 interface
 
 uses
-  Posix.Base;
+  Posix.Base, Posix.Signal;
 
 const
   EPOLLIN  = $01; { The associated file is available for read(2) operations. }
@@ -39,7 +39,7 @@ type
   TEPoll_Data =  Epoll_Data;
   PEPoll_Data = ^Epoll_Data;
 
-  EPoll_Event = {$IFDEF CPUX64}packed{$ENDIF} record
+  EPoll_Event = {$IFDEF CPUX64}packed {$ENDIF}record
     Events: Cardinal;
     Data  : TEpoll_Data;
   end;

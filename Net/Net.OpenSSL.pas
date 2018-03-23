@@ -183,6 +183,11 @@ const
   SSL_CTRL_SET_SPLIT_SEND_FRAGMENT            = 125;
   SSL_CTRL_SET_MAX_PIPELINES                  = 126;
 
+  SSL_MODE_ENABLE_PARTIAL_WRITE       = $00000001;
+  SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER = $00000002;
+  SSL_MODE_AUTO_RETRY                 = $00000004;
+  SSL_MODE_NO_AUTO_CHAIN              = $00000008;
+
   SSL_OP_MICROSOFT_SESS_ID_BUG                = $00000001;
   SSL_OP_NETSCAPE_CHALLENGE_BUG               = $00000002;
   SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG     = $00000008;
@@ -454,6 +459,8 @@ function SSL_accept(S: PSSL): Integer; cdecl;
   external SSLEAY_DLL name _PU + 'SSL_accept'{$IFDEF MSWINDOWS} delayed{$ENDIF};
 function SSL_connect(S: PSSL): Integer; cdecl;
   external SSLEAY_DLL name _PU + 'SSL_connect'{$IFDEF MSWINDOWS} delayed{$ENDIF};
+function SSL_do_handshake(S: PSSL): Integer; cdecl;
+  external SSLEAY_DLL name _PU + 'SSL_do_handshake'{$IFDEF MSWINDOWS} delayed{$ENDIF};
 function SSL_read(s: PSSL; buf: Pointer; num: Integer): Integer; cdecl;
   external SSLEAY_DLL name _PU + 'SSL_read'{$IFDEF MSWINDOWS} delayed{$ENDIF};
 function SSL_write(s: PSSL; const buf: Pointer; num: Integer): Integer; cdecl;
@@ -508,6 +515,8 @@ procedure ERR_error_string_n(err: Cardinal; buf: MarshaledAString; len: size_t);
   external LIBEAY_DLL name _PU + 'ERR_error_string_n'{$IFDEF MSWINDOWS} delayed{$ENDIF};
 function ERR_get_error: Cardinal; cdecl;
   external LIBEAY_DLL name _PU + 'ERR_get_error'{$IFDEF MSWINDOWS} delayed{$ENDIF};
+procedure ERR_clear_error; cdecl;
+  external LIBEAY_DLL name _PU + 'ERR_clear_error'{$IFDEF MSWINDOWS} delayed{$ENDIF};
 
 procedure EVP_cleanup; cdecl;
   external LIBEAY_DLL name _PU + 'EVP_cleanup'{$IFDEF MSWINDOWS} delayed{$ENDIF};
@@ -591,6 +600,10 @@ function SSL_set_tmp_ecdh(ssl: PSSL; ecdh: MarshaledAString): Integer; inline;
 
 function SSL_CTX_set_options(ctx: PSSL_CTX; Op: Integer): Integer; inline;
 function SSL_CTX_get_options(ctx: PSSL_CTX): Integer; inline;
+function SSL_CTX_set_mode(ctx: PSSL_CTX; op: Integer): Integer; inline;
+function SSL_CTX_clear_mode(ctx: PSSL_CTX; op: Integer): Integer; inline;
+function SSL_CTX_get_mode(ctx: PSSL_CTX): Integer; inline;
+
 function SSL_set_options(ssl: PSSL; Op: Integer): Integer; inline;
 function SSL_get_options(ssl: PSSL): Integer; inline;
 function SSL_clear_options(ssl: PSSL; Op: Integer): Integer; inline;
@@ -696,6 +709,21 @@ begin
   Result := SSL_CTX_ctrl(ctx, SSL_CTRL_OPTIONS, 0, nil);
 end;
 
+function SSL_CTX_set_mode(ctx: PSSL_CTX; op: Integer): Integer;
+begin
+  Result := SSL_CTX_ctrl(ctx, SSL_CTRL_MODE, op, nil);
+end;
+
+function SSL_CTX_clear_mode(ctx: PSSL_CTX; op: Integer): Integer;
+begin
+  Result := SSL_CTX_ctrl(ctx, SSL_CTRL_CLEAR_MODE, op, nil);
+end;
+
+function SSL_CTX_get_mode(ctx: PSSL_CTX): Integer;
+begin
+  Result := SSL_CTX_ctrl(ctx, SSL_CTRL_MODE, 0, nil);
+end;
+
 function SSL_set_options(ssl: PSSL; Op: Integer): Integer;
 begin
   Result := SSL_ctrl(ssl, SSL_CTRL_OPTIONS, Op, nil);
@@ -754,7 +782,7 @@ begin
   Result := ((BIO_get_flags(b) and BIO_FLAGS_SHOULD_RETRY) <> 0);
 end;
 
-function SSL_is_init_finished(s: PSSL): Boolean; inline;
+function SSL_is_init_finished(s: PSSL): Boolean;
 begin
   Result := (SSL_state(s) = SSL_ST_OK);
 end;
@@ -774,10 +802,15 @@ end;
 
 function ssl_error_message(ssl_error: Integer): string;
 var
-  msg: array [0..511] of Byte;
+  LPtr: TPtrWrapper;
 begin
-  ERR_error_string_n(ssl_error, MarshaledAString(@msg[0]), Length(msg));
-  SetString(Result, MarshaledAString(@msg[0]), Length(msg));
+  LPtr := TMarshal.AllocMem(1024);
+  try
+    ERR_error_string_n(ssl_error, LPtr.ToPointer, 1024);
+    Result := TMarshal.ReadStringAsAnsi(LPtr);
+  finally
+    TMarshal.FreeMem(LPtr);
+  end;
 end;
 
 function set_id_callback: Longword; cdecl;
@@ -862,6 +895,7 @@ begin
   {$ELSE}
   ERR_remove_thread_state(nil);
   {$ENDIF}
+  ERR_clear_error();
   ERR_free_strings();
   EVP_cleanup();
 
